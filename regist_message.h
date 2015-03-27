@@ -19,6 +19,7 @@ using namespace FRAME;
 
 MSGMAP_BEGIN(msgmap)
 ON_PROC_PCH_PMH_PMB_PU8_I32(MSGID_SETUSERINFO_REQ, ControlHead, MsgHeadCS, CSetUserInfoReq, CSetUserInfoHandler, CSetUserInfoHandler::SetUserInfo);
+ON_PROC_PCH_PMH_PMB_PU8_I32(MSGID_GETUSERINFO_REQ, ControlHead, MsgHeadCS, CGetUserInfoReq, CGetUserInfoHandler, CGetUserInfoHandler::GetUserInfo);
 MSGMAP_END(msgmap)
 
 #endif /* REGIST_MESSAGE_H_ */

@@ -55,7 +55,7 @@ int32_t CGetUserInfoHandler::GetUserInfo(ICtlHead *pCtlHead, IMsgHead *pMsgHead,
 
 	CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
 	CRedisChannel *pRedisChannel = pRedisBank->GetRedisChannel(pConfigUserBaseInfo->string);
-	pRedisChannel->HMGet(pSession, itoa(pMsgHeadCS->m_nDstUin), "%s %s %s %s %s %s %s %s %s %s", pConfigUserBaseInfo->version,
+	pRedisChannel->HMGet(pSession, itoa(pMsgHeadCS->m_nSrcUin), "%s %s %s %s %s %s %s %s %s %s", pConfigUserBaseInfo->version,
 			pConfigUserBaseInfo->oneselfwords, pConfigUserBaseInfo->school, pConfigUserBaseInfo->hometown, pConfigUserBaseInfo->birthplace,
 			pConfigUserBaseInfo->liveplace, pConfigUserBaseInfo->job, pConfigUserBaseInfo->age, pConfigUserBaseInfo->height,
 			pConfigUserBaseInfo->weight);
@@ -77,7 +77,8 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 	CRedisChannel *pRespChannel = pRedisBank->GetRedisChannel(pMsgDispatchConfig->GetChannelKey(MSGID_GETUSERINFO_RESP));
 	if(pRespChannel == NULL)
 	{
-
+		WRITE_WARN_LOG(SERVER_NAME, "it's not found redis channel by msgid!{msgid=%d, srcuin=%u, dstuin=%u}\n", MSGID_GETUSERINFO_RESP,
+				pUserSession->m_stMsgHeadCS.m_nSrcUin, pUserSession->m_stMsgHeadCS.m_nDstUin);
 		pRedisSessionBank->DestroySession(pRedisSession);
 		return 0;
 	}
@@ -111,6 +112,12 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 				break;
 			}
 
+			if(stGetUserInfoResp.m_nVersion == pUserSession->m_stGetUserInfoReq.m_nVersion)
+			{
+				stGetUserInfoResp.m_nResult = CGetUserInfoResp::enmResult_DontNeedUpdate;
+				break;
+			}
+
 			pReplyElement = pRedisReply->element[1];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
@@ -132,7 +139,7 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 			pReplyElement = pRedisReply->element[4];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
-				stGetUserInfoResp.m_strBirthPlace = string(pReplyElement->str);
+				stGetUserInfoResp.m_strAge = string(pReplyElement->str);
 			}
 
 			pReplyElement = pRedisReply->element[5];
@@ -144,25 +151,19 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 			pReplyElement = pRedisReply->element[6];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
-				stGetUserInfoResp.m_strJob = string(pReplyElement->str);
+				stGetUserInfoResp.m_strHeight = string(pReplyElement->str);
 			}
 
 			pReplyElement = pRedisReply->element[7];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
-				stGetUserInfoResp.m_nAge = atoi(pReplyElement->str);
+				stGetUserInfoResp.m_strWeight = string(pReplyElement->str);
 			}
 
 			pReplyElement = pRedisReply->element[8];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
-				stGetUserInfoResp.m_nHeight = atoi(pReplyElement->str);
-			}
-
-			pReplyElement = pRedisReply->element[9];
-			if(pReplyElement->type != REDIS_REPLY_NIL)
-			{
-				stGetUserInfoResp.m_nWeight = atoi(pReplyElement->str);
+				stGetUserInfoResp.m_strJob = string(pReplyElement->str);
 			}
 		}
 	}while(0);
@@ -179,7 +180,7 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 	}
 
 	uint16_t nTotalSize = CServerHelper::MakeMsg(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stGetUserInfoResp, arrRespBuf, sizeof(arrRespBuf));
-	pRespChannel->Publish(NULL, (char *)arrRespBuf, nTotalSize);
+	pRespChannel->RPush(NULL, (char *)arrRespBuf, nTotalSize);
 
 	g_Frame.Dump(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stGetUserInfoResp, "send ");
 
@@ -219,7 +220,7 @@ int32_t CGetUserInfoHandler::OnRedisSessionTimeout(void *pTimerData)
 	stGetUserInfoResp.m_strTips = pStringConfig->GetString(stMsgHeadCS.m_nMsgID, stGetUserInfoResp.m_nResult);
 
 	uint16_t nTotalSize = CServerHelper::MakeMsg(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stGetUserInfoResp, arrRespBuf, sizeof(arrRespBuf));
-	pRespChannel->Publish(NULL, (char *)arrRespBuf, nTotalSize);
+	pRespChannel->RPush(NULL, (char *)arrRespBuf, nTotalSize);
 
 	g_Frame.Dump(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stGetUserInfoResp, "send ");
 

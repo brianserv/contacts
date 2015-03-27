@@ -4,7 +4,8 @@
 		<error result="255" string="服务器发生未知错误"/>
 	</msg>
 	<msg msgid="108">
-		<error result="1" string="没有权限"/>
+		<error result="1" string="资料已是最新"/>
+		<error result="2" string="没有权限"/>
 		<error result="255" string="服务器发生未知错误"/>
 	</msg>
 </server>

@@ -48,42 +48,138 @@ int32_t CSetUserInfoHandler::SetUserInfo(ICtlHead *pCtlHead, IMsgHead *pMsgHead,
 	CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
 	CRedisChannel *pUserBaseInfoChannel = pRedisBank->GetRedisChannel(pConfigUserBaseInfo->string);
 
-	const char *arrArgv[CSetUserInfoReq::enmMaxUserInfoCount * 2];
-	size_t arrArgvLen[CSetUserInfoReq::enmMaxUserInfoCount * 2];
-	for(int32_t i = 0; i < pSetUserInfoReq->m_nCount; ++i)
+
+	CRedisSessionBank *pRedisSessionBank = (CRedisSessionBank *)g_Frame.GetBank(BANK_REDIS_SESSION);
+	RedisSession *pSession = pRedisSessionBank->CreateSession(this, static_cast<RedisReply>(&CSetUserInfoHandler::OnSessionSetUserBaseInfo),
+			static_cast<TimerProc>(&CSetUserInfoHandler::OnRedisSessionTimeout));
+	UserSession *pSessionData = new(pSession->GetSessionData()) UserSession();
+	pSessionData->m_stCtlHead = *pControlHead;
+	pSessionData->m_stMsgHeadCS = *pMsgHeadCS;
+	pSessionData->m_stSetUserInfoReq = *pSetUserInfoReq;
+
+	pUserBaseInfoChannel->HIncrBy(pSession, itoa(pMsgHeadCS->m_nSrcUin), "%s %d", pConfigUserBaseInfo->version, 1);
+
+	return 0;
+}
+
+int32_t CSetUserInfoHandler::OnSessionSetUserBaseInfo(int32_t nResult, void *pReply, void *pSession)
+{
+	redisReply *pRedisReply = (redisReply *)pReply;
+	RedisSession *pRedisSession = (RedisSession *)pSession;
+	UserSession *pUserSession = (UserSession *)pRedisSession->GetSessionData();
+
+	CRedisSessionBank *pRedisSessionBank = (CRedisSessionBank *)g_Frame.GetBank(BANK_REDIS_SESSION);
+	CStringConfig *pStringConfig = (CStringConfig *)g_Frame.GetConfig(CONFIG_STRING);
+
+	CMsgDispatchConfig *pMsgDispatchConfig = (CMsgDispatchConfig *)g_Frame.GetConfig(CONFIG_MSGDISPATCH);
+	CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
+	CRedisChannel *pRespChannel = pRedisBank->GetRedisChannel(pMsgDispatchConfig->GetChannelKey(MSGID_SETUSERINFO_RESP));
+	if(pRespChannel == NULL)
 	{
-		arrArgv[2 * i] = pSetUserInfoReq->m_arrKey[i].c_str();
-		arrArgv[2 * i + 1] = pSetUserInfoReq->m_arrValue[i].c_str();
-		arrArgvLen[2 * i] = pSetUserInfoReq->m_arrKey[i].size();
-		arrArgvLen[2 * i + 1] = pSetUserInfoReq->m_arrValue[i].size();
+		WRITE_WARN_LOG(SERVER_NAME, "it's not found redis channel by msgid!{msgid=%d, srcuin=%u, dstuin=%u}\n", MSGID_SETUSERINFO_RESP,
+				pUserSession->m_stMsgHeadCS.m_nSrcUin, pUserSession->m_stMsgHeadCS.m_nDstUin);
+		pRedisSessionBank->DestroySession(pRedisSession);
+		return 0;
 	}
 
-	if(pSetUserInfoReq->m_nCount > 0)
-	{
-		pUserBaseInfoChannel->HMSet(NULL, itoa(pMsgHeadCS->m_nSrcUin), pSetUserInfoReq->m_nCount, arrArgv, arrArgvLen);
+	uint8_t arrRespBuf[MAX_MSG_SIZE];
 
-		UserBaseInfo *pConfigUserBaseInfo = (UserBaseInfo *)g_Frame.GetConfig(REGIST_PHONE_INFO);
-		pUserBaseInfoChannel->HIncrBy(NULL, itoa(pMsgHeadCS->m_nSrcUin), "%s %d", pConfigUserBaseInfo->version, 1);
+	CSetUserInfoResp stSetUserInfoResp;
+	stSetUserInfoResp.m_nResult = CSetUserInfoResp::enmResult_OK;
+
+	bool bIsReturn = false;
+	do
+	{
+		if(pRedisReply->type == REDIS_REPLY_ERROR)
+		{
+			stSetUserInfoResp.m_nResult = CSetUserInfoResp::enmResult_Unknown;
+			bIsReturn = true;
+			break;
+		}
+
+		if(pRedisReply->type == REDIS_REPLY_INTEGER)
+		{
+			stSetUserInfoResp.m_nVersion = pRedisReply->integer;
+		}
+	}while(0);
+
+	MsgHeadCS stMsgHeadCS;
+	stMsgHeadCS.m_nMsgID = MSGID_SETUSERINFO_RESP;
+	stMsgHeadCS.m_nSeq = pUserSession->m_stMsgHeadCS.m_nSeq;
+	stMsgHeadCS.m_nSrcUin = pUserSession->m_stMsgHeadCS.m_nSrcUin;
+	stMsgHeadCS.m_nDstUin = pUserSession->m_stMsgHeadCS.m_nDstUin;
+
+	if(bIsReturn)
+	{
+		stSetUserInfoResp.m_strTips = pStringConfig->GetString(stMsgHeadCS.m_nMsgID, stSetUserInfoResp.m_nResult);
 	}
+	else
+	{
+		const char *arrArgv[CSetUserInfoReq::enmMaxUserInfoCount * 2];
+		size_t arrArgvLen[CSetUserInfoReq::enmMaxUserInfoCount * 2];
+		for(int32_t i = 0; i < pUserSession->m_stSetUserInfoReq.m_nCount; ++i)
+		{
+			arrArgv[2 * i] = pUserSession->m_stSetUserInfoReq.m_arrKey[i].c_str();
+			arrArgv[2 * i + 1] = pUserSession->m_stSetUserInfoReq.m_arrValue[i].c_str();
+			arrArgvLen[2 * i] = pUserSession->m_stSetUserInfoReq.m_arrKey[i].size();
+			arrArgvLen[2 * i + 1] = pUserSession->m_stSetUserInfoReq.m_arrValue[i].size();
+		}
+
+		if(pUserSession->m_stSetUserInfoReq.m_nCount > 0)
+		{
+			UserBaseInfo *pConfigUserBaseInfo = (UserBaseInfo *)g_Frame.GetConfig(USER_BASE_INFO);
+			CRedisChannel *pUserBaseInfoChannel = pRedisBank->GetRedisChannel(pConfigUserBaseInfo->string);
+			pUserBaseInfoChannel->HMSet(NULL, itoa(pUserSession->m_stMsgHeadCS.m_nSrcUin), pUserSession->m_stSetUserInfoReq.m_nCount * 2,
+					arrArgv, arrArgvLen);
+		}
+	}
+
+	uint16_t nTotalSize = CServerHelper::MakeMsg(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stSetUserInfoResp, arrRespBuf, sizeof(arrRespBuf));
+	pRespChannel->RPush(NULL, (char *)arrRespBuf, nTotalSize);
+
+	g_Frame.Dump(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stSetUserInfoResp, "send ");
+
+	pRedisSessionBank->DestroySession(pRedisSession);
+	return 0;
+}
+
+int32_t CSetUserInfoHandler::OnRedisSessionTimeout(void *pTimerData)
+{
+	CRedisSessionBank *pRedisSessionBank = (CRedisSessionBank *)g_Frame.GetBank(BANK_REDIS_SESSION);
+	RedisSession *pRedisSession = (RedisSession *)pTimerData;
+	UserSession *pUserSession = (UserSession *)pRedisSession->GetSessionData();
+
+	CMsgDispatchConfig *pMsgDispatchConfig = (CMsgDispatchConfig *)g_Frame.GetConfig(CONFIG_MSGDISPATCH);
+	CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
+	CRedisChannel *pRespChannel = pRedisBank->GetRedisChannel(pMsgDispatchConfig->GetChannelKey(MSGID_SETUSERINFO_RESP));
+	if(pRespChannel == NULL)
+	{
+		WRITE_WARN_LOG(SERVER_NAME, "it's not found redis channel by msgid!{msgid=%d, srcuin=%u, dstuin=%u}\n", MSGID_SETUSERINFO_RESP,
+				pUserSession->m_stMsgHeadCS.m_nSrcUin, pUserSession->m_stMsgHeadCS.m_nDstUin);
+		pRedisSessionBank->DestroySession(pRedisSession);
+		return 0;
+	}
+
+	CStringConfig *pStringConfig = (CStringConfig *)g_Frame.GetConfig(CONFIG_STRING);
 
 	uint8_t arrRespBuf[MAX_MSG_SIZE];
 
 	MsgHeadCS stMsgHeadCS;
 	stMsgHeadCS.m_nMsgID = MSGID_SETUSERINFO_RESP;
-	stMsgHeadCS.m_nSeq = pMsgHeadCS->m_nSeq;
-	stMsgHeadCS.m_nSrcUin = pMsgHeadCS->m_nSrcUin;
-	stMsgHeadCS.m_nDstUin = pMsgHeadCS->m_nDstUin;
+	stMsgHeadCS.m_nSeq = pUserSession->m_stMsgHeadCS.m_nSeq;
+	stMsgHeadCS.m_nSrcUin = pUserSession->m_stMsgHeadCS.m_nSrcUin;
+	stMsgHeadCS.m_nDstUin = pUserSession->m_stMsgHeadCS.m_nDstUin;
 
 	CSetUserInfoResp stSetUserInfoResp;
-	stSetUserInfoResp.m_nResult = CSetUserInfoResp::enmResult_OK;
+	stSetUserInfoResp.m_nResult = CSetUserInfoResp::enmResult_Unknown;
+	stSetUserInfoResp.m_strTips = pStringConfig->GetString(stMsgHeadCS.m_nMsgID, stSetUserInfoResp.m_nResult);
 
-	CMsgDispatchConfig *pMsgDispatchConfig = (CMsgDispatchConfig *)g_Frame.GetConfig(CONFIG_MSGDISPATCH);
-	CRedisChannel *pRespChannel = pRedisBank->GetRedisChannel(pMsgDispatchConfig->GetChannelKey(MSGID_SETUSERINFO_RESP));
-	uint16_t nTotalSize = CServerHelper::MakeMsg(pCtlHead, &stMsgHeadCS, &stSetUserInfoResp, arrRespBuf, sizeof(arrRespBuf));
-	pRespChannel->Publish(NULL, (char *)arrRespBuf, nTotalSize);
+	uint16_t nTotalSize = CServerHelper::MakeMsg(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stSetUserInfoResp, arrRespBuf, sizeof(arrRespBuf));
+	pRespChannel->RPush(NULL, (char *)arrRespBuf, nTotalSize);
 
-	g_Frame.Dump(pCtlHead, &stMsgHeadCS, &stSetUserInfoResp, "send ");
+	g_Frame.Dump(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stSetUserInfoResp, "send ");
 
+	pRedisSessionBank->DestroySession(pRedisSession);
 	return 0;
 }
 

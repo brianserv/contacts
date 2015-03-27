@@ -21,6 +21,15 @@ using namespace FRAME;
 
 class CSetUserInfoHandler : public CBaseObject
 {
+	struct UserSession
+	{
+		UserSession()
+		{
+		}
+		ControlHead			m_stCtlHead;
+		MsgHeadCS			m_stMsgHeadCS;
+		CSetUserInfoReq		m_stSetUserInfoReq;
+	};
 public:
 
 	virtual int32_t Init()
@@ -37,6 +46,10 @@ public:
 	}
 
 	int32_t SetUserInfo(ICtlHead *pCtlHead, IMsgHead *pMsgHead, IMsgBody *pMsgBody, uint8_t *pBuf, int32_t nBufSize);
+
+	int32_t OnSessionSetUserBaseInfo(int32_t nResult, void *pReply, void *pSession);
+
+	int32_t OnRedisSessionTimeout(void *pTimerData);
 };
 
 
