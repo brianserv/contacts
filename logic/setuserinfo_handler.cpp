@@ -43,7 +43,7 @@ int32_t CSetUserInfoHandler::SetUserInfo(ICtlHead *pCtlHead, IMsgHead *pMsgHead,
 		return 0;
 	}
 
-	UserBaseInfo *pConfigUserBaseInfo = (UserBaseInfo *)g_Frame.GetConfig(USER_BASE_INFO);
+	UserBaseInfo *pConfigUserBaseInfo = (UserBaseInfo *)g_Frame.GetConfig(USER_BASEINFO);
 
 	CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
 	CRedisChannel *pUserBaseInfoChannel = pRedisBank->GetRedisChannel(pConfigUserBaseInfo->string);
@@ -101,6 +101,11 @@ int32_t CSetUserInfoHandler::OnSessionSetUserBaseInfo(int32_t nResult, void *pRe
 		{
 			stSetUserInfoResp.m_nVersion = pRedisReply->integer;
 		}
+		else
+		{
+			bIsReturn = true;
+			break;
+		}
 	}while(0);
 
 	MsgHeadCS stMsgHeadCS;
@@ -127,7 +132,7 @@ int32_t CSetUserInfoHandler::OnSessionSetUserBaseInfo(int32_t nResult, void *pRe
 
 		if(pUserSession->m_stSetUserInfoReq.m_nCount > 0)
 		{
-			UserBaseInfo *pConfigUserBaseInfo = (UserBaseInfo *)g_Frame.GetConfig(USER_BASE_INFO);
+			UserBaseInfo *pConfigUserBaseInfo = (UserBaseInfo *)g_Frame.GetConfig(USER_BASEINFO);
 			CRedisChannel *pUserBaseInfoChannel = pRedisBank->GetRedisChannel(pConfigUserBaseInfo->string);
 			pUserBaseInfoChannel->HMSet(NULL, itoa(pUserSession->m_stMsgHeadCS.m_nSrcUin), pUserSession->m_stSetUserInfoReq.m_nCount * 2,
 					arrArgv, arrArgvLen);
