@@ -1,8 +1,8 @@
 ﻿<?xml version="1.0" encoding="UTF-8"?>
 <redis>
-	<node server_id="1" server_address="127.0.0.1" server_port="6379" channel_key="client_contacts_req" channel_mode="subscribe"/>
-	<node server_id="1" server_address="127.0.0.1" server_port="6379" channel_key="client_contacts_resp"/>
-	<node server_id="1" server_address="127.0.0.1" server_port="6379" channel_key="user_base_info_"/>
-	<node server_id="1" server_address="127.0.0.1" server_port="6379" channel_key="account_info_"/>
+	<node server_id="1" server_address="127.0.0.1" server_port="6379" channel_key="client:contacts:req" channel_mode="subscribe"/>
+	<node server_id="1" server_address="127.0.0.1" server_port="6379" channel_key="client:contacts:resp"/>
+	<node server_id="1" server_address="127.0.0.1" server_port="6379" channel_key="user:baseinfo:"/>
+	<node server_id="1" server_address="127.0.0.1" server_port="6379" channel_key="accountinfo:"/>
 </redis>
 

@@ -31,7 +31,7 @@ using namespace NETEVENT;
 using namespace FRAME;
 
 //注册到配置管理器
-REGIST_CONFIG(USER_BASE_INFO, UserBaseInfo)
+REGIST_CONFIG(USER_BASEINFO, UserBaseInfo)
 REGIST_CONFIG(ACCOUNT_INFO, AccountInfo)
 
 int32_t InitNetAndTimer(CNetHandler *pNetHandler)
