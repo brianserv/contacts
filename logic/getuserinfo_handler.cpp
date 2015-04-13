@@ -43,7 +43,7 @@ int32_t CGetUserInfoHandler::GetUserInfo(ICtlHead *pCtlHead, IMsgHead *pMsgHead,
 		return 0;
 	}
 
-	UserBaseInfo *pConfigUserBaseInfo = (UserBaseInfo *)g_Frame.GetConfig(USER_BASE_INFO);
+	UserBaseInfo *pConfigUserBaseInfo = (UserBaseInfo *)g_Frame.GetConfig(USER_BASEINFO);
 
 	CRedisSessionBank *pRedisSessionBank = (CRedisSessionBank *)g_Frame.GetBank(BANK_REDIS_SESSION);
 	RedisSession *pSession = pRedisSessionBank->CreateSession(this, static_cast<RedisReply>(&CGetUserInfoHandler::OnSessionGetUserBaseInfo),
@@ -55,10 +55,11 @@ int32_t CGetUserInfoHandler::GetUserInfo(ICtlHead *pCtlHead, IMsgHead *pMsgHead,
 
 	CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
 	CRedisChannel *pRedisChannel = pRedisBank->GetRedisChannel(pConfigUserBaseInfo->string);
-	pRedisChannel->HMGet(pSession, itoa(pMsgHeadCS->m_nSrcUin), "%s %s %s %s %s %s %s %s %s %s", pConfigUserBaseInfo->version,
-			pConfigUserBaseInfo->oneselfwords, pConfigUserBaseInfo->school, pConfigUserBaseInfo->hometown, pConfigUserBaseInfo->birthplace,
-			pConfigUserBaseInfo->liveplace, pConfigUserBaseInfo->job, pConfigUserBaseInfo->age, pConfigUserBaseInfo->height,
-			pConfigUserBaseInfo->weight);
+	pRedisChannel->HMGet(pSession, itoa(pMsgHeadCS->m_nSrcUin), "%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s", pConfigUserBaseInfo->version,
+			pConfigUserBaseInfo->oneselfwords, pConfigUserBaseInfo->school, pConfigUserBaseInfo->hometown, pConfigUserBaseInfo->birthday,
+			pConfigUserBaseInfo->age, pConfigUserBaseInfo->liveplace, pConfigUserBaseInfo->height, pConfigUserBaseInfo->weight,
+			pConfigUserBaseInfo->job, pConfigUserBaseInfo->care_people_count, pConfigUserBaseInfo->fans_count, pConfigUserBaseInfo->friends_count,
+			pConfigUserBaseInfo->publishtopic_count, pConfigUserBaseInfo->jointopic_count);
 
 	return 0;
 }
@@ -139,32 +140,73 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 			pReplyElement = pRedisReply->element[4];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
-				stGetUserInfoResp.m_strAge = string(pReplyElement->str);
+				stGetUserInfoResp.m_strBirthday = string(pReplyElement->str);
 			}
 
 			pReplyElement = pRedisReply->element[5];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
-				stGetUserInfoResp.m_strLivePlace = string(pReplyElement->str);
+				stGetUserInfoResp.m_nAge = atoi(pReplyElement->str);
 			}
 
 			pReplyElement = pRedisReply->element[6];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
-				stGetUserInfoResp.m_strHeight = string(pReplyElement->str);
+				stGetUserInfoResp.m_strLivePlace = string(pReplyElement->str);
 			}
 
 			pReplyElement = pRedisReply->element[7];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
-				stGetUserInfoResp.m_strWeight = string(pReplyElement->str);
+				stGetUserInfoResp.m_strHeight = string(pReplyElement->str);
 			}
 
 			pReplyElement = pRedisReply->element[8];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
+				stGetUserInfoResp.m_strWeight = string(pReplyElement->str);
+			}
+
+			pReplyElement = pRedisReply->element[9];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
 				stGetUserInfoResp.m_strJob = string(pReplyElement->str);
 			}
+
+			pReplyElement = pRedisReply->element[10];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stGetUserInfoResp.m_nCarePeopleCount = atoi(pReplyElement->str);
+			}
+
+			pReplyElement = pRedisReply->element[11];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stGetUserInfoResp.m_nFansCount = atoi(pReplyElement->str);
+			}
+
+			pReplyElement = pRedisReply->element[12];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stGetUserInfoResp.m_nFriendsCount = atoi(pReplyElement->str);
+			}
+
+			pReplyElement = pRedisReply->element[13];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stGetUserInfoResp.m_nPublishTopicCount = atoi(pReplyElement->str);
+			}
+
+			pReplyElement = pRedisReply->element[14];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stGetUserInfoResp.m_nJoinTopicCount = atoi(pReplyElement->str);
+			}
+		}
+		else
+		{
+			bIsReturn = true;
+			break;
 		}
 	}while(0);
 
