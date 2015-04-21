@@ -103,10 +103,22 @@ int32_t CSetUserInfoHandler::OnSessionSetUserBaseInfo(int32_t nResult, void *pRe
 		}
 		else
 		{
+			stSetUserInfoResp.m_nResult = CSetUserInfoResp::enmResult_OK;
 			bIsReturn = true;
 			break;
 		}
 	}while(0);
+
+	UserBaseInfo *pConfigUserBaseInfo = (UserBaseInfo *)g_Frame.GetConfig(USER_BASEINFO);
+	for(int32_t i = 0; i < pUserSession->m_stSetUserInfoReq.m_nCount; ++i)
+	{
+		if(!pConfigUserBaseInfo->CanWrite(pUserSession->m_stSetUserInfoReq.m_arrKey[i]))
+		{
+			bIsReturn = true;
+			stSetUserInfoResp.m_nResult = CSetUserInfoResp::enmResult_CanNotWrite;
+			break;
+		}
+	}
 
 	MsgHeadCS stMsgHeadCS;
 	stMsgHeadCS.m_nMsgID = MSGID_SETUSERINFO_RESP;
