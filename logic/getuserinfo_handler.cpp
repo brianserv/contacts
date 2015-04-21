@@ -55,11 +55,13 @@ int32_t CGetUserInfoHandler::GetUserInfo(ICtlHead *pCtlHead, IMsgHead *pMsgHead,
 
 	CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
 	CRedisChannel *pRedisChannel = pRedisBank->GetRedisChannel(pConfigUserBaseInfo->string);
-	pRedisChannel->HMGet(pSession, itoa(pMsgHeadCS->m_nSrcUin), "%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s", pConfigUserBaseInfo->version,
-			pConfigUserBaseInfo->oneselfwords, pConfigUserBaseInfo->school, pConfigUserBaseInfo->hometown, pConfigUserBaseInfo->birthday,
+	pRedisChannel->HMGet(pSession, itoa(pMsgHeadCS->m_nDstUin), "%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+			pConfigUserBaseInfo->version, pConfigUserBaseInfo->uin, pConfigUserBaseInfo->accountid, pConfigUserBaseInfo->nickname,
+			pConfigUserBaseInfo->headimage, pConfigUserBaseInfo->oneselfwords, pConfigUserBaseInfo->gender,
+			pConfigUserBaseInfo->school, pConfigUserBaseInfo->hometown, pConfigUserBaseInfo->birthday,
 			pConfigUserBaseInfo->age, pConfigUserBaseInfo->liveplace, pConfigUserBaseInfo->height, pConfigUserBaseInfo->weight,
-			pConfigUserBaseInfo->job, pConfigUserBaseInfo->care_people_count, pConfigUserBaseInfo->fans_count, pConfigUserBaseInfo->friends_count,
-			pConfigUserBaseInfo->publishtopic_count, pConfigUserBaseInfo->jointopic_count);
+			pConfigUserBaseInfo->job, pConfigUserBaseInfo->follow_people_count, pConfigUserBaseInfo->fans_count, pConfigUserBaseInfo->friends_count,
+			pConfigUserBaseInfo->publishtopic_count, pConfigUserBaseInfo->jointopic_count, pConfigUserBaseInfo->photowall);
 
 	return 0;
 }
@@ -101,7 +103,8 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 
 		if(pRedisReply->type == REDIS_REPLY_ARRAY)
 		{
-			redisReply *pReplyElement = pRedisReply->element[0];
+			int32_t nIndex = 0;
+			redisReply *pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
 				stGetUserInfoResp.m_nVersion = atoi(pReplyElement->str);
@@ -119,92 +122,129 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 				break;
 			}
 
-			pReplyElement = pRedisReply->element[1];
+			pReplyElement = pRedisReply->element[nIndex++];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stGetUserInfoResp.m_nUin = atoi(pReplyElement->str);
+			}
+
+			pReplyElement = pRedisReply->element[nIndex++];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stGetUserInfoResp.m_strAccountID = string(pReplyElement->str);
+			}
+
+			pReplyElement = pRedisReply->element[nIndex++];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stGetUserInfoResp.m_strNickName = string(pReplyElement->str);
+			}
+
+			pReplyElement = pRedisReply->element[nIndex++];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stGetUserInfoResp.m_strHeadImage = string(pReplyElement->str);
+			}
+
+			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
 				stGetUserInfoResp.m_strOneselfWords = string(pReplyElement->str);
 			}
 
-			pReplyElement = pRedisReply->element[2];
+			pReplyElement = pRedisReply->element[nIndex++];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stGetUserInfoResp.m_nGender = atoi(pReplyElement->str);
+			}
+
+			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
 				stGetUserInfoResp.m_strSchool = string(pReplyElement->str);
 			}
 
-			pReplyElement = pRedisReply->element[3];
+			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
 				stGetUserInfoResp.m_strHometown = string(pReplyElement->str);
 			}
 
-			pReplyElement = pRedisReply->element[4];
+			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
 				stGetUserInfoResp.m_strBirthday = string(pReplyElement->str);
 			}
 
-			pReplyElement = pRedisReply->element[5];
+			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
 				stGetUserInfoResp.m_nAge = atoi(pReplyElement->str);
 			}
 
-			pReplyElement = pRedisReply->element[6];
+			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
 				stGetUserInfoResp.m_strLivePlace = string(pReplyElement->str);
 			}
 
-			pReplyElement = pRedisReply->element[7];
+			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
 				stGetUserInfoResp.m_strHeight = string(pReplyElement->str);
 			}
 
-			pReplyElement = pRedisReply->element[8];
+			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
 				stGetUserInfoResp.m_strWeight = string(pReplyElement->str);
 			}
 
-			pReplyElement = pRedisReply->element[9];
+			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
 				stGetUserInfoResp.m_strJob = string(pReplyElement->str);
 			}
 
-			pReplyElement = pRedisReply->element[10];
+			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
-				stGetUserInfoResp.m_nCarePeopleCount = atoi(pReplyElement->str);
+				stGetUserInfoResp.m_nFollowPeopleCount = atoi(pReplyElement->str);
 			}
 
-			pReplyElement = pRedisReply->element[11];
+			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
 				stGetUserInfoResp.m_nFansCount = atoi(pReplyElement->str);
 			}
 
-			pReplyElement = pRedisReply->element[12];
+			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
 				stGetUserInfoResp.m_nFriendsCount = atoi(pReplyElement->str);
 			}
 
-			pReplyElement = pRedisReply->element[13];
+			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
 				stGetUserInfoResp.m_nPublishTopicCount = atoi(pReplyElement->str);
 			}
 
-			pReplyElement = pRedisReply->element[14];
+			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
 				stGetUserInfoResp.m_nJoinTopicCount = atoi(pReplyElement->str);
 			}
+
+			pReplyElement = pRedisReply->element[nIndex++];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stGetUserInfoResp.m_strPhotoWall = string(pReplyElement->str);
+			}
 		}
 		else
 		{
+			stGetUserInfoResp.m_nResult = CGetUserInfoResp::enmResult_OK;
 			bIsReturn = true;
 			break;
 		}
