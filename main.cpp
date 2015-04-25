@@ -33,6 +33,8 @@ using namespace FRAME;
 //注册到配置管理器
 REGIST_CONFIG(USER_BASEINFO, UserBaseInfo)
 REGIST_CONFIG(ACCOUNT_INFO, AccountInfo)
+REGIST_CONFIG(USER_FANS, UserFans)
+REGIST_CONFIG(USER_FOLLOWERS, UserFollowers)
 
 int32_t InitNetAndTimer(CNetHandler *pNetHandler)
 {
