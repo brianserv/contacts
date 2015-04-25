@@ -60,8 +60,8 @@ int32_t CGetUserInfoHandler::GetUserInfo(ICtlHead *pCtlHead, IMsgHead *pMsgHead,
 			pConfigUserBaseInfo->headimage, pConfigUserBaseInfo->oneselfwords, pConfigUserBaseInfo->gender,
 			pConfigUserBaseInfo->school, pConfigUserBaseInfo->hometown, pConfigUserBaseInfo->birthday,
 			pConfigUserBaseInfo->age, pConfigUserBaseInfo->liveplace, pConfigUserBaseInfo->height, pConfigUserBaseInfo->weight,
-			pConfigUserBaseInfo->job, pConfigUserBaseInfo->follow_people_count, pConfigUserBaseInfo->fans_count, pConfigUserBaseInfo->friends_count,
-			pConfigUserBaseInfo->publishtopic_count, pConfigUserBaseInfo->jointopic_count, pConfigUserBaseInfo->photowall);
+			pConfigUserBaseInfo->job, pConfigUserBaseInfo->followers_count, pConfigUserBaseInfo->fans_count, pConfigUserBaseInfo->friends_count,
+			pConfigUserBaseInfo->pubtopic_count, pConfigUserBaseInfo->jointopic_count, pConfigUserBaseInfo->photowall);
 
 	return 0;
 }
