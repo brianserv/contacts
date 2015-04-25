@@ -2,5 +2,6 @@
 <msg>
 	<param msgid="105" channel_key="client:contacts:resp"/>
 	<param msgid="108" channel_key="client:contacts:resp"/>
+	<param msgid="114" channel_key="client:contacts:resp"/>
 </msg>
 

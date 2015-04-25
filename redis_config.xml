@@ -4,5 +4,8 @@
 	<node server_id="1" server_address="127.0.0.1" server_port="6379" channel_key="client:contacts:resp"/>
 	<node server_id="1" server_address="127.0.0.1" server_port="6379" channel_key="user:baseinfo:"/>
 	<node server_id="1" server_address="127.0.0.1" server_port="6379" channel_key="accountinfo:"/>
+	<node server_id="1" server_address="127.0.0.1" server_port="6379" channel_key="user:fans:"/>
+	<node server_id="1" server_address="127.0.0.1" server_port="6379" channel_key="user:followers:"/>
+	<node server_id="1" server_address="127.0.0.1" server_port="6379" channel_key="user:blacklist:"/>
 </redis>
 
