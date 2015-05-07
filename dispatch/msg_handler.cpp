@@ -11,7 +11,6 @@
 #include "../../frame/frame.h"
 #include "../server_typedef.h"
 #include "msg_handler.h"
-#include "../../include/account_msg.h"
 
 using namespace LOGGER;
 using namespace FRAME;
