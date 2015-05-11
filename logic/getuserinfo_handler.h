@@ -25,10 +25,12 @@ class CGetUserInfoHandler : public CBaseObject
 	{
 		UserSession()
 		{
+			m_nIsFollow = 0;
 		}
 		ControlHead			m_stCtlHead;
 		MsgHeadCS			m_stMsgHeadCS;
 		CGetUserInfoReq		m_stGetUserInfoReq;
+		uint8_t				m_nIsFollow;
 	};
 
 public:
@@ -47,6 +49,8 @@ public:
 	}
 
 	int32_t GetUserInfo(ICtlHead *pCtlHead, IMsgHead *pMsgHead, IMsgBody *pMsgBody, uint8_t *pBuf, int32_t nBufSize);
+
+	int32_t OnSessionIsFollow(int32_t nResult, void *pReply, void *pSession);
 
 	int32_t OnSessionGetUserBaseInfo(int32_t nResult, void *pReply, void *pSession);
 

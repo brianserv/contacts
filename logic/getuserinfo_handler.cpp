@@ -50,8 +50,6 @@ int32_t CGetUserInfoHandler::GetUserInfo(ICtlHead *pCtlHead, IMsgHead *pMsgHead,
 		return 0;
 	}
 
-	UserBaseInfo *pConfigUserBaseInfo = (UserBaseInfo *)g_Frame.GetConfig(USER_BASEINFO);
-
 	CRedisSessionBank *pRedisSessionBank = (CRedisSessionBank *)g_Frame.GetBank(BANK_REDIS_SESSION);
 	RedisSession *pSession = pRedisSessionBank->CreateSession(this, static_cast<RedisReply>(&CGetUserInfoHandler::OnSessionGetUserBaseInfo),
 			static_cast<TimerProc>(&CGetUserInfoHandler::OnRedisSessionTimeout));
@@ -61,14 +59,87 @@ int32_t CGetUserInfoHandler::GetUserInfo(ICtlHead *pCtlHead, IMsgHead *pMsgHead,
 	pSessionData->m_stGetUserInfoReq = *pGetUserInfoReq;
 
 	CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
-	CRedisChannel *pRedisChannel = pRedisBank->GetRedisChannel(pConfigUserBaseInfo->string);
-	pRedisChannel->HMGet(pSession, itoa(pMsgHeadCS->m_nDstUin), "%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
-			pConfigUserBaseInfo->version, pConfigUserBaseInfo->uin, pConfigUserBaseInfo->accountid, pConfigUserBaseInfo->nickname,
-			pConfigUserBaseInfo->headimage, pConfigUserBaseInfo->oneselfwords, pConfigUserBaseInfo->gender,
-			pConfigUserBaseInfo->school, pConfigUserBaseInfo->hometown, pConfigUserBaseInfo->birthday,
-			pConfigUserBaseInfo->age, pConfigUserBaseInfo->liveplace, pConfigUserBaseInfo->height, pConfigUserBaseInfo->weight,
-			pConfigUserBaseInfo->job, pConfigUserBaseInfo->followers_count, pConfigUserBaseInfo->fans_count, pConfigUserBaseInfo->friends_count,
-			pConfigUserBaseInfo->createtopic_count, pConfigUserBaseInfo->jointopic_count, pConfigUserBaseInfo->photowall);
+	CRedisChannel *pRedisChannel = pRedisBank->GetRedisChannel(USER_FOLLOWERS);
+	pRedisChannel->ZScore(pSession, itoa(pMsgHeadCS->m_nSrcUin), pMsgHeadCS->m_nDstUin);
+
+	return 0;
+}
+
+int32_t CGetUserInfoHandler::OnSessionIsFollow(int32_t nResult, void *pReply, void *pSession)
+{
+	redisReply *pRedisReply = (redisReply *)pReply;
+	RedisSession *pRedisSession = (RedisSession *)pSession;
+	UserSession *pUserSession = (UserSession *)pRedisSession->GetSessionData();
+
+	CRedisSessionBank *pRedisSessionBank = (CRedisSessionBank *)g_Frame.GetBank(BANK_REDIS_SESSION);
+	CStringConfig *pStringConfig = (CStringConfig *)g_Frame.GetConfig(CONFIG_STRING);
+
+	CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
+	CRedisChannel *pRespChannel = pRedisBank->GetRedisChannel(CLIENT_RESP);
+	if(pRespChannel == NULL)
+	{
+		WRITE_WARN_LOG(SERVER_NAME, "it's not found redis channel by msgid!{msgid=%d, srcuin=%u, dstuin=%u}\n", MSGID_GETUSERINFO_RESP,
+				pUserSession->m_stMsgHeadCS.m_nSrcUin, pUserSession->m_stMsgHeadCS.m_nDstUin);
+		pRedisSessionBank->DestroySession(pRedisSession);
+		return 0;
+	}
+
+	uint8_t nRespResult = CGetUserInfoResp::enmResult_OK;
+	bool bIsReturn = false;
+	do
+	{
+		if(pRedisReply->type == REDIS_REPLY_ERROR)
+		{
+			nRespResult = CGetUserInfoResp::enmResult_Unknown;
+			bIsReturn = true;
+			break;
+		}
+
+		if(pRedisReply->type != REDIS_REPLY_NIL)
+		{
+			pUserSession->m_nIsFollow = 1;
+		}
+		else
+		{
+			pUserSession->m_nIsFollow = 0;
+		}
+	}while(false);
+
+	uint8_t arrRespBuf[MAX_MSG_SIZE];
+	if(bIsReturn)
+	{
+		MsgHeadCS stMsgHeadCS;
+		stMsgHeadCS.m_nMsgID = MSGID_GETUSERINFO_RESP;
+		stMsgHeadCS.m_nSeq = pUserSession->m_stMsgHeadCS.m_nSeq;
+		stMsgHeadCS.m_nSrcUin = pUserSession->m_stMsgHeadCS.m_nSrcUin;
+		stMsgHeadCS.m_nDstUin = pUserSession->m_stMsgHeadCS.m_nDstUin;
+
+		CGetUserInfoResp stGetUserInfoResp;
+		stGetUserInfoResp.m_nResult = nRespResult;
+		stGetUserInfoResp.m_strTips = pStringConfig->GetString(stMsgHeadCS.m_nMsgID, stGetUserInfoResp.m_nResult);
+
+		uint16_t nTotalSize = CServerHelper::MakeMsg(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stGetUserInfoResp, arrRespBuf, sizeof(arrRespBuf));
+		pRespChannel->RPush(NULL, (char *)arrRespBuf, nTotalSize);
+
+		g_Frame.Dump(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stGetUserInfoResp, "send ");
+
+		pRedisSessionBank->DestroySession(pRedisSession);
+	}
+	else
+	{
+		pRedisSession->SetHandleRedisReply(static_cast<RedisReply>(&CGetUserInfoHandler::OnSessionGetUserBaseInfo));
+		pRedisSession->SetTimerProc(static_cast<TimerProc>(&CGetUserInfoHandler::OnRedisSessionTimeout), 60 * MS_PER_SECOND);
+
+		UserBaseInfo *pConfigUserBaseInfo = (UserBaseInfo *)g_Frame.GetConfig(USER_BASEINFO);
+		CRedisChannel *pUserBaseInfoChannel = pRedisBank->GetRedisChannel(pConfigUserBaseInfo->string);
+		pUserBaseInfoChannel->HMGet(pRedisSession, itoa(pUserSession->m_stMsgHeadCS.m_nDstUin), "%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+				pConfigUserBaseInfo->version, pConfigUserBaseInfo->uin, pConfigUserBaseInfo->accountid, pConfigUserBaseInfo->nickname,
+				pConfigUserBaseInfo->headimage, pConfigUserBaseInfo->oneselfwords, pConfigUserBaseInfo->gender,
+				pConfigUserBaseInfo->school, pConfigUserBaseInfo->hometown, pConfigUserBaseInfo->birthday,
+				pConfigUserBaseInfo->age, pConfigUserBaseInfo->liveplace, pConfigUserBaseInfo->height, pConfigUserBaseInfo->weight,
+				pConfigUserBaseInfo->job, pConfigUserBaseInfo->followers_count, pConfigUserBaseInfo->fans_count, pConfigUserBaseInfo->friends_count,
+				pConfigUserBaseInfo->createtopics_count, pConfigUserBaseInfo->jointopics_count, pConfigUserBaseInfo->photowall);
+	}
 
 	return 0;
 }
@@ -96,14 +167,15 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 
 	CGetUserInfoResp stGetUserInfoResp;
 	stGetUserInfoResp.m_nResult = CGetUserInfoResp::enmResult_OK;
+	stGetUserInfoResp.m_nIsFollow = pUserSession->m_nIsFollow;
 
-	bool bIsReturn = false;
+	bool bIsSuccess = false;
 	do
 	{
 		if(pRedisReply->type == REDIS_REPLY_ERROR)
 		{
 			stGetUserInfoResp.m_nResult = CGetUserInfoResp::enmResult_Unknown;
-			bIsReturn = true;
+			bIsSuccess = true;
 			break;
 		}
 
@@ -118,7 +190,7 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 			else
 			{
 				stGetUserInfoResp.m_nResult = CGetUserInfoResp::enmResult_Unknown;
-				bIsReturn = true;
+				bIsSuccess = true;
 				break;
 			}
 
@@ -251,7 +323,7 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 		else
 		{
 			stGetUserInfoResp.m_nResult = CGetUserInfoResp::enmResult_OK;
-			bIsReturn = true;
+			bIsSuccess = true;
 			break;
 		}
 	}while(0);
@@ -262,7 +334,7 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 	stMsgHeadCS.m_nSrcUin = pUserSession->m_stMsgHeadCS.m_nSrcUin;
 	stMsgHeadCS.m_nDstUin = pUserSession->m_stMsgHeadCS.m_nDstUin;
 
-	if(bIsReturn)
+	if(bIsSuccess)
 	{
 		stGetUserInfoResp.m_strTips = pStringConfig->GetString(stMsgHeadCS.m_nMsgID, stGetUserInfoResp.m_nResult);
 	}
