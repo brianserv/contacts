@@ -26,12 +26,14 @@ class CFollowUserHandler : public CBaseObject
 		UserSession()
 		{
 			m_nMsgSize = 0;
+			m_bSendTimeoutResp = true;
 		}
 		ControlHead			m_stCtlHead;
 		MsgHeadCS			m_stMsgHeadCS;
 		uint16_t				m_nMsgSize;
 		uint8_t				m_arrMsg[1024];
 		CFollowUserReq		m_stFollowUserReq;
+		bool				m_bSendTimeoutResp;
 	};
 
 public:
@@ -52,6 +54,8 @@ public:
 	int32_t FollowUser(ICtlHead *pCtlHead, IMsgHead *pMsgHead, IMsgBody *pMsgBody, uint8_t *pBuf, int32_t nBufSize);
 
 	int32_t OnSessionExistInBlackList(int32_t nResult, void *pReply, void *pSession);
+
+	int32_t OnSessionExistInDstFollowList(int32_t nResult, void *pReply, void *pSession);
 
 	int32_t OnSessionGetUserUnreadMsgCount(int32_t nResult, void *pReply, void *pSession);
 
