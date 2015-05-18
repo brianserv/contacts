@@ -6,18 +6,18 @@
  */
 
 #include "followuser_handler.h"
-#include "../../common/common_datetime.h"
-#include "../../common/common_api.h"
-#include "../../frame/frame.h"
-#include "../../frame/server_helper.h"
-#include "../../frame/redissession_bank.h"
-#include "../../logger/logger.h"
-#include "../../include/cachekey_define.h"
-#include "../../include/control_head.h"
-#include "../../include/typedef.h"
-#include "../config/string_config.h"
-#include "../server_typedef.h"
-#include "../bank/redis_bank.h"
+#include "common/common_datetime.h"
+#include "common/common_api.h"
+#include "frame/frame.h"
+#include "frame/server_helper.h"
+#include "frame/redissession_bank.h"
+#include "frame/cachekey_define.h"
+#include "logger/logger.h"
+#include "include/control_head.h"
+#include "include/typedef.h"
+#include "config/string_config.h"
+#include "server_typedef.h"
+#include "bank/redis_bank.h"
 
 using namespace LOGGER;
 using namespace FRAME;
@@ -39,7 +39,7 @@ int32_t CFollowUserHandler::FollowUser(ICtlHead *pCtlHead, IMsgHead *pMsgHead, I
 	if(pControlHead->m_nUin != pMsgHeadCS->m_nSrcUin)
 	{
 		CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
-		CRedisChannel *pClientRespChannel = pRedisBank->GetRedisChannel(pControlHead->m_nGateID, CLIENT_RESP);
+		CRedisChannel *pClientRespChannel = pRedisBank->GetRedisChannel(pControlHead->m_nGateRedisAddress, pControlHead->m_nGateRedisPort);
 
 		return CServerHelper::KickUser(pControlHead, pMsgHeadCS, pClientRespChannel, KickReason_NotLogined);
 	}
@@ -50,41 +50,31 @@ int32_t CFollowUserHandler::FollowUser(ICtlHead *pCtlHead, IMsgHead *pMsgHead, I
 		return 0;
 	}
 
-	if(pFollowUserReq->m_nFollowType == CFollowUserReq::enmFollowTypw_Cancel)
+	if(pFollowUserReq->m_nFollowType == CFollowUserReq::enmFollowType_Cancel)
 	{
 		CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
-		CRedisChannel *pRespChannel = pRedisBank->GetRedisChannel(CLIENT_RESP);
 
-		uint8_t arrRespBuf[MAX_MSG_SIZE];
+		CRedisChannel *pUserFansChannel = pRedisBank->GetRedisChannel(UserFans::servername, pMsgHeadCS->m_nDstUin);
+		pUserFansChannel->ZRem(NULL, CServerHelper::MakeRedisKey(UserFans::keyname, pMsgHeadCS->m_nDstUin), "%u", pMsgHeadCS->m_nSrcUin);
 
-		MsgHeadCS stMsgHeadCS;
-		stMsgHeadCS.m_nMsgID = MSGID_FOLLOWUSER_RESP;
-		stMsgHeadCS.m_nSeq = pMsgHeadCS->m_nSeq;
-		stMsgHeadCS.m_nSrcUin = pMsgHeadCS->m_nSrcUin;
-		stMsgHeadCS.m_nDstUin = pMsgHeadCS->m_nDstUin;
+		CRedisChannel *pUserFollowersChannel = pRedisBank->GetRedisChannel(UserFollowers::servername, pMsgHeadCS->m_nSrcUin);
+		pUserFollowersChannel->ZRem(NULL, CServerHelper::MakeRedisKey(UserFollowers::keyname, pMsgHeadCS->m_nSrcUin), "%u", pMsgHeadCS->m_nDstUin);
 
-		CFollowUserResp stFollowUserResp;
-		stFollowUserResp.m_nResult = CFollowUserResp::enmResult_OK;
+		CRedisSessionBank *pRedisSessionBank = (CRedisSessionBank *)g_Frame.GetBank(BANK_REDIS_SESSION);
+		RedisSession *pSession = pRedisSessionBank->CreateSession(this, static_cast<RedisReply>(&CFollowUserHandler::OnSessionExistInFriendList),
+				static_cast<TimerProc>(&CFollowUserHandler::OnRedisSessionTimeout));
+		UserSession *pSessionData = new(pSession->GetSessionData()) UserSession();
+		pSessionData->m_stCtlHead = *pControlHead;
+		pSessionData->m_stMsgHeadCS = *pMsgHeadCS;
+		pSessionData->m_stFollowUserReq = *pFollowUserReq;
+		pSessionData->m_nMsgSize = pMsgHeadCS->m_nTotalSize;
+		memcpy(pSessionData->m_arrMsg, pBuf + pControlHead->m_nHeadSize, nBufSize - pControlHead->m_nHeadSize);
 
-		uint16_t nTotalSize = CServerHelper::MakeMsg(pCtlHead, &stMsgHeadCS, &stFollowUserResp, arrRespBuf, sizeof(arrRespBuf));
-		pRespChannel->RPush(NULL, (char *)arrRespBuf, nTotalSize);
-
-		g_Frame.Dump(pCtlHead, &stMsgHeadCS, &stFollowUserResp, "send ");
-
-		CRedisChannel *pUserFansChannel = pRedisBank->GetRedisChannel(USER_FANS);
-		pUserFansChannel->ZRem(NULL, itoa(pMsgHeadCS->m_nDstUin), "%u", pMsgHeadCS->m_nSrcUin);
-
-		CRedisChannel *pUserFollowersChannel = pRedisBank->GetRedisChannel(USER_FOLLOWERS);
-		pUserFollowersChannel->ZRem(NULL, itoa(pMsgHeadCS->m_nSrcUin), "%u", pMsgHeadCS->m_nDstUin);
-
-		CRedisChannel *pUserFriendsChannel = pRedisBank->GetRedisChannel(USER_FRIENDS);
-		pUserFriendsChannel->ZAdd(NULL, itoa(pMsgHeadCS->m_nSrcUin), "%ld %u", pControlHead->m_nTimeStamp, pMsgHeadCS->m_nDstUin);
-		pUserFriendsChannel->ZAdd(NULL, itoa(pMsgHeadCS->m_nDstUin), "%ld %u", pControlHead->m_nTimeStamp, pMsgHeadCS->m_nSrcUin);
+		CRedisChannel *pUserFriendsChannel = pRedisBank->GetRedisChannel(UserFriends::servername, pMsgHeadCS->m_nSrcUin);
+		pUserFriendsChannel->ZScore(pSession, CServerHelper::MakeRedisKey(UserFriends::keyname, pMsgHeadCS->m_nSrcUin), pMsgHeadCS->m_nDstUin);
 	}
 	else
 	{
-		UserBlackList *pConfigBlackList = (UserBlackList *)g_Frame.GetConfig(USER_BLACKLIST);
-
 		CRedisSessionBank *pRedisSessionBank = (CRedisSessionBank *)g_Frame.GetBank(BANK_REDIS_SESSION);
 		RedisSession *pSession = pRedisSessionBank->CreateSession(this, static_cast<RedisReply>(&CFollowUserHandler::OnSessionExistInBlackList),
 				static_cast<TimerProc>(&CFollowUserHandler::OnRedisSessionTimeout));
@@ -96,10 +86,80 @@ int32_t CFollowUserHandler::FollowUser(ICtlHead *pCtlHead, IMsgHead *pMsgHead, I
 		memcpy(pSessionData->m_arrMsg, pBuf + pControlHead->m_nHeadSize, nBufSize - pControlHead->m_nHeadSize);
 
 		CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
-		CRedisChannel *pBlackListChannel = pRedisBank->GetRedisChannel(pConfigBlackList->string);
-		pBlackListChannel->ZScore(pSession, itoa(pMsgHeadCS->m_nDstUin), pMsgHeadCS->m_nSrcUin);
+		CRedisChannel *pBlackListChannel = pRedisBank->GetRedisChannel(UserBlackList::servername, pMsgHeadCS->m_nDstUin);
+		pBlackListChannel->ZScore(pSession, CServerHelper::MakeRedisKey(UserBlackList::keyname, pMsgHeadCS->m_nDstUin), pMsgHeadCS->m_nSrcUin);
 	}
 
+	return 0;
+}
+
+int32_t CFollowUserHandler::OnSessionExistInFriendList(int32_t nResult, void *pReply, void *pSession)
+{
+	redisReply *pRedisReply = (redisReply *)pReply;
+	RedisSession *pRedisSession = (RedisSession *)pSession;
+	UserSession *pUserSession = (UserSession *)pRedisSession->GetSessionData();
+
+	CRedisSessionBank *pRedisSessionBank = (CRedisSessionBank *)g_Frame.GetBank(BANK_REDIS_SESSION);
+	CStringConfig *pStringConfig = (CStringConfig *)g_Frame.GetConfig(CONFIG_STRING);
+
+	CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
+	CRedisChannel *pRespChannel = pRedisBank->GetRedisChannel(pUserSession->m_stCtlHead.m_nGateRedisAddress, pUserSession->m_stCtlHead.m_nGateRedisPort);
+	if(pRespChannel == NULL)
+	{
+		WRITE_WARN_LOG(SERVER_NAME, "it's not found redis channel by msgid!{msgid=%d, srcuin=%u, dstuin=%u}\n", MSGID_FOLLOWUSER_RESP,
+				pUserSession->m_stMsgHeadCS.m_nSrcUin, pUserSession->m_stMsgHeadCS.m_nDstUin);
+		pRedisSessionBank->DestroySession(pRedisSession);
+		return 0;
+	}
+
+	uint8_t arrRespBuf[MAX_MSG_SIZE];
+
+	CFollowUserResp stFollowUserResp;
+	stFollowUserResp.m_nResult = CFollowUserResp::enmResult_OK;
+
+	bool bIsFriend = false;
+	do
+	{
+		if(pRedisReply->type == REDIS_REPLY_ERROR)
+		{
+			stFollowUserResp.m_nResult = CFollowUserResp::enmResult_Unknown;
+			break;
+		}
+
+		if(pRedisReply->type != REDIS_REPLY_NIL)
+		{
+			bIsFriend = true;
+			break;
+		}
+	}while(0);
+
+	MsgHeadCS stMsgHeadCS;
+	stMsgHeadCS.m_nMsgID = MSGID_FOLLOWUSER_RESP;
+	stMsgHeadCS.m_nSeq = pUserSession->m_stMsgHeadCS.m_nSeq;
+	stMsgHeadCS.m_nSrcUin = pUserSession->m_stMsgHeadCS.m_nSrcUin;
+	stMsgHeadCS.m_nDstUin = pUserSession->m_stMsgHeadCS.m_nDstUin;
+
+	if(!bIsFriend)
+	{
+		stFollowUserResp.m_strTips = pStringConfig->GetString(stMsgHeadCS.m_nMsgID, stFollowUserResp.m_nResult);
+	}
+	else
+	{
+		CRedisChannel *pUserFriendsChannel = pRedisBank->GetRedisChannel(UserFriends::servername, pUserSession->m_stMsgHeadCS.m_nSrcUin);
+		pUserFriendsChannel->ZRem(NULL, CServerHelper::MakeRedisKey(UserFriends::keyname, pUserSession->m_stMsgHeadCS.m_nSrcUin), "%u",
+				pUserSession->m_stMsgHeadCS.m_nDstUin);
+
+		pUserFriendsChannel = pRedisBank->GetRedisChannel(UserFriends::servername, pUserSession->m_stMsgHeadCS.m_nDstUin);
+		pUserFriendsChannel->ZRem(NULL, CServerHelper::MakeRedisKey(UserFriends::keyname, pUserSession->m_stMsgHeadCS.m_nDstUin), "%u",
+				pUserSession->m_stMsgHeadCS.m_nSrcUin);
+	}
+
+	uint16_t nTotalSize = CServerHelper::MakeMsg(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stFollowUserResp, arrRespBuf, sizeof(arrRespBuf));
+	pRespChannel->RPush(NULL, CServerHelper::MakeRedisKey(ClientResp::keyname, pUserSession->m_stMsgHeadCS.m_nSrcUin), (char *)arrRespBuf, nTotalSize);
+
+	g_Frame.Dump(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stFollowUserResp, "send ");
+
+	pRedisSessionBank->DestroySession(pRedisSession);
 	return 0;
 }
 
@@ -113,7 +173,7 @@ int32_t CFollowUserHandler::OnSessionExistInBlackList(int32_t nResult, void *pRe
 	CStringConfig *pStringConfig = (CStringConfig *)g_Frame.GetConfig(CONFIG_STRING);
 
 	CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
-	CRedisChannel *pRespChannel = pRedisBank->GetRedisChannel(CLIENT_RESP);
+	CRedisChannel *pRespChannel = pRedisBank->GetRedisChannel(pUserSession->m_stCtlHead.m_nGateRedisAddress, pUserSession->m_stCtlHead.m_nGateRedisPort);
 	if(pRespChannel == NULL)
 	{
 		WRITE_WARN_LOG(SERVER_NAME, "it's not found redis channel by msgid!{msgid=%d, srcuin=%u, dstuin=%u}\n", MSGID_FOLLOWUSER_RESP,
@@ -162,38 +222,39 @@ int32_t CFollowUserHandler::OnSessionExistInBlackList(int32_t nResult, void *pRe
 		pRedisSession->SetTimerProc(static_cast<TimerProc>(&CFollowUserHandler::OnRedisSessionTimeout), 60 * MS_PER_SECOND);
 		pUserSession->m_bSendTimeoutResp = false;
 
-		CRedisChannel *pUserFollowersChannel = pRedisBank->GetRedisChannel(USER_FOLLOWERS);
-		pUserFollowersChannel->ZScore(pRedisSession, itoa(pUserSession->m_stMsgHeadCS.m_nDstUin), pUserSession->m_stMsgHeadCS.m_nSrcUin);
+		CRedisChannel *pUserFollowersChannel = pRedisBank->GetRedisChannel(UserFollowers::servername, pUserSession->m_stMsgHeadCS.m_nDstUin);
+		pUserFollowersChannel->ZScore(pRedisSession, CServerHelper::MakeRedisKey(UserFollowers::keyname, pUserSession->m_stMsgHeadCS.m_nDstUin),
+				pUserSession->m_stMsgHeadCS.m_nSrcUin);
 
 		//unreadmsg
 		CRedisSessionBank *pRedisSessionBank = (CRedisSessionBank *)g_Frame.GetBank(BANK_REDIS_SESSION);
-		RedisSession *pQuoteSession = pRedisSessionBank->CreateSession(this, static_cast<RedisReply>(&CFollowUserHandler::OnSessionGetUserUnreadMsgCount),
+		RedisSession *pUnreadMsgSession = pRedisSessionBank->CreateSession(this, static_cast<RedisReply>(&CFollowUserHandler::OnSessionGetUserUnreadMsgCount),
 				static_cast<TimerProc>(&CFollowUserHandler::OnRedisSessionTimeout));
-		UserSession *pSessionData = new(pQuoteSession->GetSessionData()) UserSession();
+		UserSession *pSessionData = new(pUnreadMsgSession->GetSessionData()) UserSession();
 		*pSessionData = *pUserSession;
 
-		char *szUin = itoa(pUserSession->m_stMsgHeadCS.m_nDstUin);
+		const char *szUin = CServerHelper::MakeRedisKey(UserUnreadMsgList::keyname, pUserSession->m_stMsgHeadCS.m_nDstUin);
 
-		CRedisChannel *pUnreadMsgChannel = pRedisBank->GetRedisChannel(USER_UNREADMSGLIST);
+		CRedisChannel *pUnreadMsgChannel = pRedisBank->GetRedisChannel(UserUnreadMsgList::servername, pUserSession->m_stMsgHeadCS.m_nDstUin);
 		pUnreadMsgChannel->Multi();
 		pUnreadMsgChannel->ZAdd(NULL, szUin, "%ld %b", pUserSession->m_stCtlHead.m_nTimeStamp, pUserSession->m_arrMsg, (size_t)pUserSession->m_nMsgSize);
 		pUnreadMsgChannel->ZCount(NULL, szUin);
-		pUnreadMsgChannel->Exec(pQuoteSession);
+		pUnreadMsgChannel->Exec(pUnreadMsgSession);
 
 		//add to fans
-		pUserFollowersChannel = pRedisBank->GetRedisChannel(USER_FOLLOWERS);
-		pUserFollowersChannel->ZAdd(NULL, itoa(pUserSession->m_stMsgHeadCS.m_nSrcUin), "%ld %u", pUserSession->m_stCtlHead.m_nTimeStamp, pUserSession->m_stMsgHeadCS.m_nDstUin);
+		pUserFollowersChannel = pRedisBank->GetRedisChannel(UserFollowers::servername, pUserSession->m_stMsgHeadCS.m_nSrcUin);
+		pUserFollowersChannel->ZAdd(NULL, CServerHelper::MakeRedisKey(UserFollowers::keyname, pUserSession->m_stMsgHeadCS.m_nSrcUin), "%ld %u",
+				pUserSession->m_stCtlHead.m_nTimeStamp, pUserSession->m_stMsgHeadCS.m_nDstUin);
 
-		CRedisChannel *pUserFansChannel = pRedisBank->GetRedisChannel(USER_FANS);
-		pUserFansChannel->ZAdd(NULL, itoa(pUserSession->m_stMsgHeadCS.m_nDstUin), "%ld %u", pUserSession->m_stCtlHead.m_nTimeStamp, pUserSession->m_stMsgHeadCS.m_nSrcUin);
+		CRedisChannel *pUserFansChannel = pRedisBank->GetRedisChannel(UserFans::servername, pUserSession->m_stMsgHeadCS.m_nDstUin);
+		pUserFansChannel->ZAdd(NULL, CServerHelper::MakeRedisKey(UserFans::keyname, pUserSession->m_stMsgHeadCS.m_nDstUin), "%ld %u",
+				pUserSession->m_stCtlHead.m_nTimeStamp, pUserSession->m_stMsgHeadCS.m_nSrcUin);
 	}
 
 	uint16_t nTotalSize = CServerHelper::MakeMsg(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stFollowUserResp, arrRespBuf, sizeof(arrRespBuf));
-	pRespChannel->RPush(NULL, (char *)arrRespBuf, nTotalSize);
+	pRespChannel->RPush(NULL, CServerHelper::MakeRedisKey(ClientResp::keyname, pUserSession->m_stCtlHead.m_nGateID), (char *)arrRespBuf, nTotalSize);
 
 	g_Frame.Dump(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stFollowUserResp, "send ");
-
-	pRedisSessionBank->DestroySession(pRedisSession);
 	return 0;
 }
 
@@ -206,7 +267,7 @@ int32_t CFollowUserHandler::OnSessionExistInDstFollowList(int32_t nResult, void 
 	CRedisSessionBank *pRedisSessionBank = (CRedisSessionBank *)g_Frame.GetBank(BANK_REDIS_SESSION);
 
 	CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
-	CRedisChannel *pRespChannel = pRedisBank->GetRedisChannel(CLIENT_RESP);
+	CRedisChannel *pRespChannel = pRedisBank->GetRedisChannel(pUserSession->m_stCtlHead.m_nGateRedisAddress, pUserSession->m_stCtlHead.m_nGateRedisPort);
 	if(pRespChannel == NULL)
 	{
 		WRITE_WARN_LOG(SERVER_NAME, "it's not found redis channel by msgid!{msgid=%d, srcuin=%u, dstuin=%u}\n", MSGID_FOLLOWUSER_RESP,
@@ -232,9 +293,13 @@ int32_t CFollowUserHandler::OnSessionExistInDstFollowList(int32_t nResult, void 
 
 	if(bCanBeFriend)
 	{
-		CRedisChannel *pUserFriendsChannel = pRedisBank->GetRedisChannel(USER_FRIENDS);
-		pUserFriendsChannel->ZAdd(NULL, itoa(pUserSession->m_stMsgHeadCS.m_nSrcUin), "%ld %u", pUserSession->m_stCtlHead.m_nTimeStamp, pUserSession->m_stMsgHeadCS.m_nDstUin);
-		pUserFriendsChannel->ZAdd(NULL, itoa(pUserSession->m_stMsgHeadCS.m_nDstUin), "%ld %u", pUserSession->m_stCtlHead.m_nTimeStamp, pUserSession->m_stMsgHeadCS.m_nSrcUin);
+		CRedisChannel *pUserFriendsChannel = pRedisBank->GetRedisChannel(UserFriends::servername, pUserSession->m_stMsgHeadCS.m_nSrcUin);
+		pUserFriendsChannel->ZAdd(NULL, CServerHelper::MakeRedisKey(UserFriends::keyname, pUserSession->m_stMsgHeadCS.m_nSrcUin), "%ld %u",
+				pUserSession->m_stCtlHead.m_nTimeStamp, pUserSession->m_stMsgHeadCS.m_nDstUin);
+
+		pUserFriendsChannel = pRedisBank->GetRedisChannel(UserFriends::servername, pUserSession->m_stMsgHeadCS.m_nDstUin);
+		pUserFriendsChannel->ZAdd(NULL, CServerHelper::MakeRedisKey(UserFriends::keyname, pUserSession->m_stMsgHeadCS.m_nDstUin), "%ld %u",
+				pUserSession->m_stCtlHead.m_nTimeStamp, pUserSession->m_stMsgHeadCS.m_nSrcUin);
 	}
 
 	pRedisSessionBank->DestroySession(pRedisSession);
@@ -274,11 +339,11 @@ int32_t CFollowUserHandler::OnSessionGetUserUnreadMsgCount(int32_t nResult, void
 	{
 		pRedisSession->SetHandleRedisReply(static_cast<RedisReply>(&CFollowUserHandler::OnSessionGetUserSessionInfo));
 
-		UserSessionInfo *pUserSessionInfo = (UserSessionInfo *)g_Frame.GetConfig(USER_SESSIONINFO);
 		CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
-		CRedisChannel *pUserSessionChannel = pRedisBank->GetRedisChannel(USER_SESSIONINFO);
-		pUserSessionChannel->HMGet(pRedisSession, itoa(pUserSession->m_stMsgHeadCS.m_nDstUin), "%s %s %s %s", pUserSessionInfo->clientaddress,
-				pUserSessionInfo->clientport, pUserSessionInfo->sessionid, pUserSessionInfo->gateid);
+		CRedisChannel *pUserSessionChannel = pRedisBank->GetRedisChannel(UserSessionInfo::servername, pUserSession->m_stMsgHeadCS.m_nDstUin);
+		pUserSessionChannel->HMGet(pRedisSession, CServerHelper::MakeRedisKey(UserSessionInfo::keyname, pUserSession->m_stMsgHeadCS.m_nDstUin),
+				"%s %s %s %s %s %s", UserSessionInfo::clientaddress, UserSessionInfo::clientport, UserSessionInfo::sessionid,
+				UserSessionInfo::gateid, UserSessionInfo::gateredisaddress, UserSessionInfo::gateredisport);
 	}
 	else
 	{
@@ -352,6 +417,28 @@ int32_t CFollowUserHandler::OnSessionGetUserSessionInfo(int32_t nResult, void *p
 				bGetSessionSuccess = false;
 				break;
 			}
+
+			pReplyElement = pRedisReply->element[4];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stCtlHead.m_nGateRedisAddress = atoi(pReplyElement->str);
+			}
+			else
+			{
+				bGetSessionSuccess = false;
+				break;
+			}
+
+			pReplyElement = pRedisReply->element[5];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stCtlHead.m_nGateRedisPort = atoi(pReplyElement->str);
+			}
+			else
+			{
+				bGetSessionSuccess = false;
+				break;
+			}
 		}
 		else
 		{
@@ -363,7 +450,7 @@ int32_t CFollowUserHandler::OnSessionGetUserSessionInfo(int32_t nResult, void *p
 	if(bGetSessionSuccess)
 	{
 		CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
-		CRedisChannel *pPushClientChannel = pRedisBank->GetRedisChannel(stCtlHead.m_nGateID, CLIENT_RESP);
+		CRedisChannel *pPushClientChannel = pRedisBank->GetRedisChannel(stCtlHead.m_nGateRedisAddress, stCtlHead.m_nGateRedisPort);
 
 		CServerHelper::SendSyncNoti(pPushClientChannel, &stCtlHead, pUserSession->m_stMsgHeadCS.m_nDstUin);
 	}
@@ -383,7 +470,7 @@ int32_t CFollowUserHandler::OnRedisSessionTimeout(void *pTimerData)
 	if(pUserSession->m_bSendTimeoutResp)
 	{
 		CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
-		CRedisChannel *pRespChannel = pRedisBank->GetRedisChannel(CLIENT_RESP);
+		CRedisChannel *pRespChannel = pRedisBank->GetRedisChannel(pUserSession->m_stCtlHead.m_nGateRedisAddress, pUserSession->m_stCtlHead.m_nGateRedisPort);
 		if(pRespChannel == NULL)
 		{
 			WRITE_WARN_LOG(SERVER_NAME, "it's not found redis channel by msgid!{msgid=%d, srcuin=%u, dstuin=%u}\n", MSGID_FOLLOWUSER_RESP,
@@ -407,7 +494,7 @@ int32_t CFollowUserHandler::OnRedisSessionTimeout(void *pTimerData)
 		stFollowUserResp.m_strTips = pStringConfig->GetString(stMsgHeadCS.m_nMsgID, stFollowUserResp.m_nResult);
 
 		uint16_t nTotalSize = CServerHelper::MakeMsg(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stFollowUserResp, arrRespBuf, sizeof(arrRespBuf));
-		pRespChannel->RPush(NULL, (char *)arrRespBuf, nTotalSize);
+		pRespChannel->RPush(NULL, CServerHelper::MakeRedisKey(ClientResp::keyname, pUserSession->m_stCtlHead.m_nGateID), (char *)arrRespBuf, nTotalSize);
 
 		g_Frame.Dump(&pUserSession->m_stCtlHead, &stMsgHeadCS, &stFollowUserResp, "send ");
 	}

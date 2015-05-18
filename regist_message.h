@@ -8,10 +8,10 @@
 #ifndef REGIST_MESSAGE_H_
 #define REGIST_MESSAGE_H_
 
-#include "../frame/frame.h"
-#include "../include/msg_head.h"
-#include "../include/control_head.h"
-#include "../include/contacts_msg.h"
+#include "frame/frame.h"
+#include "include/msg_head.h"
+#include "include/control_head.h"
+#include "include/contacts_msg.h"
 #include "logic/setuserinfo_handler.h"
 #include "logic/getuserinfo_handler.h"
 #include "logic/followuser_handler.h"

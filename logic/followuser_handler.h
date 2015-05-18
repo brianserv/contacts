@@ -8,12 +8,12 @@
 #ifndef LOGIC_FOLLOWUSER_HANDLER_H_
 #define LOGIC_FOLLOWUSER_HANDLER_H_
 
-#include "../../common/common_object.h"
-#include "../../frame/frame_impl.h"
-#include "../../frame/redis_session.h"
-#include "../../include/control_head.h"
-#include "../../include/contacts_msg.h"
-#include "../../include/msg_head.h"
+#include "common/common_object.h"
+#include "frame/frame_impl.h"
+#include "frame/redis_session.h"
+#include "include/control_head.h"
+#include "include/contacts_msg.h"
+#include "include/msg_head.h"
 #include <string>
 
 using namespace std;
@@ -52,6 +52,8 @@ public:
 	}
 
 	int32_t FollowUser(ICtlHead *pCtlHead, IMsgHead *pMsgHead, IMsgBody *pMsgBody, uint8_t *pBuf, int32_t nBufSize);
+
+	int32_t OnSessionExistInFriendList(int32_t nResult, void *pReply, void *pSession);
 
 	int32_t OnSessionExistInBlackList(int32_t nResult, void *pReply, void *pSession);
 
