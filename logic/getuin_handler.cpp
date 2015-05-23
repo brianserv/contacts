@@ -184,9 +184,12 @@ int32_t CGetUinHandler::OnSessionGetUserUin(int32_t nResult, void *pReply, void 
 			if(pRedisReply->type == REDIS_REPLY_ARRAY)
 			{
 				redisReply *pReplyElement = pRedisReply->element[0];
-				pUserSession->m_nUin = atoi(pReplyElement->str);
-				bSuccess = true;
-				break;
+				if(pReplyElement->type != REDIS_REPLY_NIL)
+				{
+					pUserSession->m_nUin = atoi(pReplyElement->str);
+					bSuccess = true;
+					break;
+				}
 			}
 		}
 		else
