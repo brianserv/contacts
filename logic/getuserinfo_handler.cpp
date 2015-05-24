@@ -37,7 +37,7 @@ int32_t CGetUserInfoHandler::GetUserInfo(ICtlHead *pCtlHead, IMsgHead *pMsgHead,
 		return 0;
 	}
 
-	if(pControlHead->m_nUin != pMsgHeadCS->m_nSrcUin)
+	if((pControlHead->m_nUin == 0) || (pControlHead->m_nUin != pMsgHeadCS->m_nSrcUin))
 	{
 		CRedisBank *pRedisBank = (CRedisBank *)g_Frame.GetBank(BANK_REDIS);
 		CRedisChannel *pClientRespChannel = pRedisBank->GetRedisChannel(pControlHead->m_nGateRedisAddress, pControlHead->m_nGateRedisPort);
@@ -229,13 +229,13 @@ int32_t CGetUserInfoHandler::OnSessionExistInBlackList(int32_t nResult, void *pR
 
 		CRedisChannel *pUserBaseInfoChannel = pRedisBank->GetRedisChannel(UserBaseInfo::servername, pUserSession->m_stMsgHeadCS.m_nDstUin);
 		pUserBaseInfoChannel->HMGet(pRedisSession, CServerHelper::MakeRedisKey(UserBaseInfo::keyname, pUserSession->m_stMsgHeadCS.m_nDstUin),
-				"%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+				"%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
 				UserBaseInfo::version, UserBaseInfo::uin, UserBaseInfo::accountid, UserBaseInfo::nickname,
 				UserBaseInfo::headimage, UserBaseInfo::oneselfwords, UserBaseInfo::gender,
 				UserBaseInfo::school, UserBaseInfo::hometown, UserBaseInfo::birthday,
 				UserBaseInfo::age, UserBaseInfo::liveplace, UserBaseInfo::height, UserBaseInfo::weight,
 				UserBaseInfo::job, UserBaseInfo::createtopics_count, UserBaseInfo::jointopics_count,
-				UserBaseInfo::photowall);
+				UserBaseInfo::photowall, UserBaseInfo::createtime);
 	}
 
 	return 0;
@@ -396,6 +396,12 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 			{
 				stGetUserInfoResp.m_strPhotoWall = string(pReplyElement->str);
 			}
+
+			pReplyElement = pRedisReply->element[nIndex++];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stGetUserInfoResp.m_nCreateTime = string(pReplyElement->str);
+			}
 		}
 		else
 		{
@@ -527,7 +533,7 @@ int32_t CGetUserInfoHandler::OnSessionGetUserRelationInfo(int32_t nResult, void 
 		CRedisChannel *pUnreadMsgChannel = pRedisBank->GetRedisChannel(UserUnreadMsgList::servername, pUserSession->m_stMsgHeadCS.m_nDstUin);
 		pUnreadMsgChannel->Multi();
 		pUnreadMsgChannel->ZAdd(NULL, szUin, "%ld %b", pUserSession->m_stCtlHead.m_nTimeStamp, arrRespBuf, (size_t)nOffset);
-		pUnreadMsgChannel->ZCount(NULL, szUin);
+		pUnreadMsgChannel->ZCard(NULL, szUin);
 		pUnreadMsgChannel->Exec(pRedisSession);
 	}
 	else
