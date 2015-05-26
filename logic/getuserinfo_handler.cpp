@@ -64,13 +64,13 @@ int32_t CGetUserInfoHandler::GetUserInfo(ICtlHead *pCtlHead, IMsgHead *pMsgHead,
 
 		CRedisChannel *pUserBaseInfoChannel = pRedisBank->GetRedisChannel(UserBaseInfo::servername, pMsgHeadCS->m_nDstUin);
 		pUserBaseInfoChannel->HMGet(pSession, CServerHelper::MakeRedisKey(UserBaseInfo::keyname, pMsgHeadCS->m_nDstUin),
-				"%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+				"%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
 				UserBaseInfo::version, UserBaseInfo::uin, UserBaseInfo::accountid, UserBaseInfo::nickname,
 				UserBaseInfo::headimage, UserBaseInfo::oneselfwords, UserBaseInfo::gender,
 				UserBaseInfo::school, UserBaseInfo::hometown, UserBaseInfo::birthday,
 				UserBaseInfo::age, UserBaseInfo::liveplace, UserBaseInfo::height, UserBaseInfo::weight,
 				UserBaseInfo::job, UserBaseInfo::createtopics_count, UserBaseInfo::jointopics_count,
-				UserBaseInfo::photowall);
+				UserBaseInfo::photowall, UserBaseInfo::createtime);
 	}
 	else
 	{
@@ -400,7 +400,7 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 			pReplyElement = pRedisReply->element[nIndex++];
 			if(pReplyElement->type != REDIS_REPLY_NIL)
 			{
-				stGetUserInfoResp.m_nCreateTime = string(pReplyElement->str);
+				stGetUserInfoResp.m_nCreateTime = atoi(pReplyElement->str);
 			}
 		}
 		else
