@@ -64,13 +64,13 @@ int32_t CGetUserInfoHandler::GetUserInfo(ICtlHead *pCtlHead, IMsgHead *pMsgHead,
 
 		CRedisChannel *pUserBaseInfoChannel = pRedisBank->GetRedisChannel(UserBaseInfo::servername, pMsgHeadCS->m_nDstUin);
 		pUserBaseInfoChannel->HMGet(pSession, CServerHelper::MakeRedisKey(UserBaseInfo::keyname, pMsgHeadCS->m_nDstUin),
-				"%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+				"%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
 				UserBaseInfo::version, UserBaseInfo::uin, UserBaseInfo::accountid, UserBaseInfo::nickname,
 				UserBaseInfo::headimage, UserBaseInfo::oneselfwords, UserBaseInfo::gender,
 				UserBaseInfo::school, UserBaseInfo::hometown, UserBaseInfo::birthday,
 				UserBaseInfo::age, UserBaseInfo::liveplace, UserBaseInfo::height, UserBaseInfo::weight,
 				UserBaseInfo::job, UserBaseInfo::createtopics_count, UserBaseInfo::jointopics_count,
-				UserBaseInfo::photowall, UserBaseInfo::createtime);
+				UserBaseInfo::photowall, UserBaseInfo::createtime, UserBaseInfo::followbusline_count);
 	}
 	else
 	{
@@ -229,13 +229,13 @@ int32_t CGetUserInfoHandler::OnSessionExistInBlackList(int32_t nResult, void *pR
 
 		CRedisChannel *pUserBaseInfoChannel = pRedisBank->GetRedisChannel(UserBaseInfo::servername, pUserSession->m_stMsgHeadCS.m_nDstUin);
 		pUserBaseInfoChannel->HMGet(pRedisSession, CServerHelper::MakeRedisKey(UserBaseInfo::keyname, pUserSession->m_stMsgHeadCS.m_nDstUin),
-				"%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+				"%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s",
 				UserBaseInfo::version, UserBaseInfo::uin, UserBaseInfo::accountid, UserBaseInfo::nickname,
 				UserBaseInfo::headimage, UserBaseInfo::oneselfwords, UserBaseInfo::gender,
 				UserBaseInfo::school, UserBaseInfo::hometown, UserBaseInfo::birthday,
 				UserBaseInfo::age, UserBaseInfo::liveplace, UserBaseInfo::height, UserBaseInfo::weight,
 				UserBaseInfo::job, UserBaseInfo::createtopics_count, UserBaseInfo::jointopics_count,
-				UserBaseInfo::photowall, UserBaseInfo::createtime);
+				UserBaseInfo::photowall, UserBaseInfo::createtime, UserBaseInfo::followbusline_count);
 	}
 
 	return 0;
@@ -402,6 +402,12 @@ int32_t CGetUserInfoHandler::OnSessionGetUserBaseInfo(int32_t nResult, void *pRe
 			{
 				stGetUserInfoResp.m_nCreateTime = atoi(pReplyElement->str);
 			}
+
+			pReplyElement = pRedisReply->element[nIndex++];
+			if(pReplyElement->type != REDIS_REPLY_NIL)
+			{
+				stGetUserInfoResp.m_nFollowBusLineCount = atoi(pReplyElement->str);
+			}
 		}
 		else
 		{
@@ -512,7 +518,7 @@ int32_t CGetUserInfoHandler::OnSessionGetUserRelationInfo(int32_t nResult, void 
 	{
 		CRedisChannel *pLookMeChannel = pRedisBank->GetRedisChannel(UserLookMe::servername, pUserSession->m_stMsgHeadCS.m_nDstUin);
 		pLookMeChannel->ZAdd(NULL, CServerHelper::MakeRedisKey(UserLookMe::keyname, pUserSession->m_stMsgHeadCS.m_nDstUin), "%ld %u",
-				pUserSession->m_stCtlHead.m_nTimeStamp, pUserSession->m_stMsgHeadCS.m_nSrcUin);
+				pUserSession->m_stCtlHead.m_nTimeStamp / 1000, pUserSession->m_stMsgHeadCS.m_nSrcUin);
 
 		//add to unreadmsglist
 		pRedisSession->SetHandleRedisReply(static_cast<RedisReply>(&CGetUserInfoHandler::OnSessionGetUserUnreadMsgCount));
